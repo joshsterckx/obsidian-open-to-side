@@ -6,39 +6,64 @@ import {
 	OpenToSideSettingTab,
 	OpenToSideSettings,
 } from "./settings";
+import { matchesTrigger } from "./trigger";
 
 /**
- * How long after a mod+alt click a split request still counts as coming from that click.
+ * How long after a trigger click a split request still counts as coming from that click.
  * Generous enough for the click handler to reach getLeaf, short enough that a stale flag can
  * never redirect an unrelated split later on.
  */
 const CLICK_WINDOW_MS = 500;
 
 type GetLeaf = Workspace["getLeaf"];
+type IsModEvent = typeof Keymap.isModEvent;
+/** Keymap's statics, as a plain object shape so monkey-around can wrap them. */
+type KeymapStatics = { isModEvent: IsModEvent };
 
 export default class OpenToSidePlugin extends Plugin {
 	settings: OpenToSideSettings = DEFAULT_SETTINGS;
 
-	/** Timestamp of the last mod+alt click, or 0 once consumed. */
+	/** Timestamp of the last trigger click, or 0 once consumed. */
 	private splitClickAt = 0;
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
 		this.addSettingTab(new OpenToSideSettingTab(this.app, this));
 
-		// Record mod+alt clicks without intercepting them. Obsidian resolves link clicks on
+		const plugin = this;
+
+		// Record trigger clicks without intercepting them. Obsidian resolves link clicks on
 		// mousedown in some contexts and on click in others, so watch both, in the capture phase
 		// so the flag is set before Obsidian's own handlers run.
 		const record = (evt: MouseEvent) => {
-			if (Keymap.isModEvent(evt) === "split") this.splitClickAt = Date.now();
+			if (matchesTrigger(evt, this.settings.trigger)) this.splitClickAt = Date.now();
 		};
 		this.registerDomEvent(document, "mousedown", record, { capture: true });
 		this.registerDomEvent(document, "click", record, { capture: true });
 
-		// Every mod+alt click funnels through getLeaf("split"), which makes this the one place
-		// worth patching — it covers links in Live Preview, Reading mode, the file explorer,
-		// search results and backlinks alike.
-		const plugin = this;
+		// Obsidian asks isModEvent what a click means at every link-click site, then passes the
+		// answer to getLeaf. Reporting "split" for the chosen combo is what lets a non-native
+		// trigger like plain Alt+click work at all — and it does so through Obsidian's own link
+		// handling, so notes, the file explorer, search and backlinks are all covered without
+		// this plugin having to parse links out of the DOM itself.
+		this.register(
+			around(Keymap as unknown as KeymapStatics, {
+				isModEvent:
+					(next: IsModEvent): IsModEvent =>
+					function (this: unknown, evt?: Parameters<IsModEvent>[0]) {
+						if (
+							evt instanceof MouseEvent &&
+							matchesTrigger(evt, plugin.settings.trigger)
+						) {
+							return "split";
+						}
+						return next.call(Keymap, evt);
+					},
+			})
+		);
+
+		// Every split-open funnels through getLeaf("split"), which makes this the one place worth
+		// patching to choose *where* the note lands.
 		this.register(
 			around(this.app.workspace, {
 				// Typed loosely on purpose: getLeaf is overloaded, and the narrow overload would
@@ -92,7 +117,7 @@ export default class OpenToSidePlugin extends Plugin {
 		}
 	}
 
-	/** True if a mod+alt click just happened. One-shot: the flag is cleared on read. */
+	/** True if a trigger click just happened. One-shot: the flag is cleared on read. */
 	private consumeSplitClick(): boolean {
 		const at = this.splitClickAt;
 		this.splitClickAt = 0;

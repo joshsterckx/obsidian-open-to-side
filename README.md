@@ -21,7 +21,7 @@ Not yet in the community plugin directory. Until then:
 
 ## Behaviour
 
-- **Only `Cmd+Alt+click` is overridden.** The "Split right" command and other plugins' split-opens
+- **Only the trigger click is overridden.** The "Split right" command and other plugins' split-opens
   keep Obsidian's native behaviour.
 - Works for links in Live Preview and Reading mode, and for the file explorer, search results and
   backlinks.
@@ -32,8 +32,13 @@ Not yet in the community plugin directory. Until then:
 
 | Setting | Default | Effect |
 | --- | --- | --- |
+| Trigger | `Cmd+Alt+click` | Which click opens a note in the side group. Also available: `Cmd+click`, `Cmd+Shift+click`, `Alt+click`, `Alt+Shift+click`, `Shift+click`. |
 | Keep focus in the current note | On | Leaves the cursor where it was, so you can keep reading and previewing. Turn off to jump into the side pane. |
 | Reuse the side tab | On | Replaces the side group's current tab, keeping it to a single preview. Turn off to open a new tab each time. |
+
+Combos are matched exactly, so choosing `Alt+click` won't also fire on `Cmd+Alt+click`. Picking a
+non-default trigger takes over whatever that combo normally does in Obsidian, and hands
+`Cmd+Alt+click` back to its default of always opening a new split.
 
 ## Development
 
@@ -49,12 +54,18 @@ Point it elsewhere with `VAULT=/path/to/vault npm run install-local`.
 
 ## How it works
 
-Every `Cmd+Alt+click` funnels through `workspace.getLeaf("split")`, so the plugin patches that
-single method rather than trying to intercept link clicks in the DOM — which would need separate
-handling for Live Preview, Reading mode, the file explorer, search and backlinks.
+Every split-open funnels through `workspace.getLeaf("split")`, so the plugin patches that single
+method rather than trying to intercept link clicks in the DOM — which would need separate handling
+for Live Preview, Reading mode, the file explorer, search and backlinks.
 
-To keep the override narrow, a capture-phase listener records whether a mod+alt click just
-happened (it does not intercept), and the patch only redirects when that flag is fresh.
+To keep the override narrow, a capture-phase listener records whether a trigger click just happened
+(it does not intercept), and the patch only redirects when that flag is fresh.
+
+A custom trigger needs one more piece. Obsidian only produces `getLeaf("split")` for its own
+`Cmd+Alt+click`, so a combo like plain `Alt+click` would never reach that patch. Obsidian asks the
+public `Keymap.isModEvent` what a click means at each link-click site, so the plugin wraps it to
+report `"split"` for the chosen combo — which means custom triggers go through Obsidian's own link
+handling and keep working everywhere, with no DOM link parsing.
 
 Resolving the target group uses some workspace internals that aren't in the public typings
 (`children`, `parentSplit`, `leaf.parent`). Every read of them is guarded, so if a future Obsidian
