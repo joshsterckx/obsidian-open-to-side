@@ -67,6 +67,12 @@ public `Keymap.isModEvent` what a click means at each link-click site, so the pl
 report `"split"` for the chosen combo — which means custom triggers go through Obsidian's own link
 handling and keep working everywhere, with no DOM link parsing.
 
+Live Preview needs one exception. Inside the editor, Alt and Shift already mean "rectangular
+selection" and "extend selection", so Obsidian bails out of link handling for a plain Alt- or
+Shift-click *before* it consults `isModEvent` — its gate is `Keymap.isModifier(evt, "Mod")`. The
+plugin wraps that too, reporting `Mod` for the chosen combo, but only for clicks inside an editor,
+since that is the only place the gate exists.
+
 Resolving the target group uses some workspace internals that aren't in the public typings
 (`children`, `parentSplit`, `leaf.parent`). Every read of them is guarded, so if a future Obsidian
 release changes them the plugin falls back to native split behaviour instead of breaking link

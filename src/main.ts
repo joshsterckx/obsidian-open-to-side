@@ -17,8 +17,14 @@ const CLICK_WINDOW_MS = 500;
 
 type GetLeaf = Workspace["getLeaf"];
 type IsModEvent = typeof Keymap.isModEvent;
+type IsModifier = typeof Keymap.isModifier;
 /** Keymap's statics, as a plain object shape so monkey-around can wrap them. */
-type KeymapStatics = { isModEvent: IsModEvent };
+type KeymapStatics = { isModEvent: IsModEvent; isModifier: IsModifier };
+
+/** Whether a click landed inside a CodeMirror editor surface. */
+function inEditor(evt: MouseEvent): boolean {
+	return evt.target instanceof Element && !!evt.target.closest(".cm-editor");
+}
 
 export default class OpenToSidePlugin extends Plugin {
 	settings: OpenToSideSettings = DEFAULT_SETTINGS;
@@ -58,6 +64,29 @@ export default class OpenToSidePlugin extends Plugin {
 							return "split";
 						}
 						return next.call(Keymap, evt);
+					},
+
+				// Live Preview refuses to treat a plain Alt- or Shift-click as a link click at
+				// all: it bails out before ever asking isModEvent, because in the editor those
+				// modifiers mean "rectangular selection" and "extend selection". The gate it
+				// checks is isModifier(evt, "Mod"), so reporting Mod for the chosen combo is what
+				// lets a non-Mod trigger work on wikilinks in the body of a note.
+				//
+				// Confined to clicks inside an editor, since that is the only place the gate
+				// exists — elsewhere, claiming Mod is held could trigger unrelated behaviour like
+				// multi-select in the file explorer.
+				isModifier:
+					(next: IsModifier): IsModifier =>
+					function (this: unknown, evt: Parameters<IsModifier>[0], modifier) {
+						if (
+							modifier === "Mod" &&
+							evt instanceof MouseEvent &&
+							inEditor(evt) &&
+							matchesTrigger(evt, plugin.settings.trigger)
+						) {
+							return true;
+						}
+						return next.call(Keymap, evt, modifier);
 					},
 			})
 		);
