@@ -9,6 +9,16 @@ Notion's side preview panel.
 
 A new split is only created when there isn't a group to the right already.
 
+## Install
+
+Not yet in the community plugin directory. Until then:
+
+- **BRAT** — install the [BRAT](https://github.com/TfTHacker/obsidian42-brat) plugin, then
+  *Add beta plugin* with `joshsterckx/obsidian-open-to-side`.
+- **Manually** — download `main.js` and `manifest.json` from the
+  [latest release](https://github.com/joshsterckx/obsidian-open-to-side/releases/latest) into
+  `<vault>/.obsidian/plugins/open-to-side/`, then enable it under Settings → Community plugins.
+
 ## Behaviour
 
 - **Only `Cmd+Alt+click` is overridden.** The "Split right" command and other plugins' split-opens
