@@ -1,0 +1,9 @@
+{
+	"id": "open-to-side",
+	"name": "Open to Side",
+	"version": "1.0.0",
+	"minAppVersion": "1.4.0",
+	"description": "Cmd+Alt+click opens links in the existing tab group to the right instead of always creating a new split.",
+	"author": "Josh Sterckx",
+	"isDesktopOnly": true
+}

@@ -1,0 +1,25 @@
+{
+	"name": "obsidian-open-to-side",
+	"version": "1.0.0",
+	"description": "Cmd+Alt+click opens links in the existing tab group to the right instead of always creating a new split.",
+	"main": "main.js",
+	"scripts": {
+		"dev": "node esbuild.config.mjs",
+		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+		"install-local": "node scripts/install-local.mjs"
+	},
+	"keywords": [],
+	"author": "Josh Sterckx",
+	"license": "MIT",
+	"devDependencies": {
+		"@types/node": "^20.11.0",
+		"builtin-modules": "^3.3.0",
+		"esbuild": "^0.20.0",
+		"obsidian": "latest",
+		"tslib": "^2.6.2",
+		"typescript": "^5.3.3"
+	},
+	"dependencies": {
+		"monkey-around": "^2.3.0"
+	}
+}
