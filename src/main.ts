@@ -1,6 +1,6 @@
 import { Keymap, PaneType, Plugin, Workspace, WorkspaceLeaf } from "obsidian";
 import { around } from "monkey-around";
-import { resolveSideLeaf } from "./side-group";
+import { getActiveLeaf, resolveSideLeaf } from "./side-group";
 import {
 	DEFAULT_SETTINGS,
 	OpenToSideSettingTab,
@@ -73,7 +73,7 @@ export default class OpenToSidePlugin extends Plugin {
 		if (!this.consumeSplitClick()) return null;
 
 		try {
-			const source = this.app.workspace.activeLeaf;
+			const source = getActiveLeaf(this.app);
 			const target =
 				resolveSideLeaf(this.app, this.settings) ?? this.createSideColumn();
 			if (!target) return null;

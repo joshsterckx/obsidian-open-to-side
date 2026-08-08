@@ -1,11 +1,22 @@
 import {
 	App,
+	View,
 	WorkspaceItem,
 	WorkspaceLeaf,
 	WorkspaceParent,
 	WorkspaceSplit,
 } from "obsidian";
 import type { OpenToSideSettings } from "./settings";
+
+/**
+ * The focused leaf, whatever kind of view it holds.
+ *
+ * Obsidian's plugin guidelines ask you not to read `workspace.activeLeaf` directly; every view
+ * carries its own leaf, so asking for the active view gets there without it.
+ */
+export function getActiveLeaf(app: App): WorkspaceLeaf | null {
+	return app.workspace.getActiveViewOfType(View)?.leaf ?? null;
+}
 
 /**
  * The main area's root split lays its children out as columns when its direction is "vertical"
@@ -43,7 +54,7 @@ function pickColumn(
 	root: WorkspaceSplit,
 	columns: WorkspaceItem[]
 ): WorkspaceItem | null {
-	const active = app.workspace.activeLeaf;
+	const active = getActiveLeaf(app);
 	const current = active ? columnOf(active, root) : null;
 
 	// The click came from outside the main area — a sidebar backlink or search result, say.
