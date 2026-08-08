@@ -1,4 +1,4 @@
-import { Keymap, PaneType, Plugin, Workspace, WorkspaceLeaf } from "obsidian";
+import { Keymap, Plugin, Workspace, WorkspaceLeaf } from "obsidian";
 import { around } from "monkey-around";
 import { getActiveLeaf, resolveSideLeaf } from "./side-group";
 import {
@@ -19,7 +19,10 @@ type GetLeaf = Workspace["getLeaf"];
 type IsModEvent = typeof Keymap.isModEvent;
 type IsModifier = typeof Keymap.isModifier;
 /** Keymap's statics, as a plain object shape so monkey-around can wrap them. */
-type KeymapStatics = { isModEvent: IsModEvent; isModifier: IsModifier };
+interface KeymapStatics {
+	isModEvent: IsModEvent;
+	isModifier: IsModifier;
+}
 
 /** Whether a click landed inside a CodeMirror editor surface. */
 function inEditor(evt: MouseEvent): boolean {
@@ -36,13 +39,15 @@ export default class OpenToSidePlugin extends Plugin {
 		await this.loadSettings();
 		this.addSettingTab(new OpenToSideSettingTab(this.app, this));
 
-		const plugin = this;
+		// Read through to the live settings on every click, so changing the trigger takes effect
+		// without reloading the plugin.
+		const matches = (evt: MouseEvent) => matchesTrigger(evt, this.settings.trigger);
 
 		// Record trigger clicks without intercepting them. Obsidian resolves link clicks on
 		// mousedown in some contexts and on click in others, so watch both, in the capture phase
 		// so the flag is set before Obsidian's own handlers run.
 		const record = (evt: MouseEvent) => {
-			if (matchesTrigger(evt, this.settings.trigger)) this.splitClickAt = Date.now();
+			if (matches(evt)) this.splitClickAt = Date.now();
 		};
 		this.registerDomEvent(document, "mousedown", record, { capture: true });
 		this.registerDomEvent(document, "click", record, { capture: true });
@@ -56,13 +61,8 @@ export default class OpenToSidePlugin extends Plugin {
 			around(Keymap as unknown as KeymapStatics, {
 				isModEvent:
 					(next: IsModEvent): IsModEvent =>
-					function (this: unknown, evt?: Parameters<IsModEvent>[0]) {
-						if (
-							evt instanceof MouseEvent &&
-							matchesTrigger(evt, plugin.settings.trigger)
-						) {
-							return "split";
-						}
+					(evt?: Parameters<IsModEvent>[0]) => {
+						if (evt instanceof MouseEvent && matches(evt)) return "split";
 						return next.call(Keymap, evt);
 					},
 
@@ -77,12 +77,12 @@ export default class OpenToSidePlugin extends Plugin {
 				// multi-select in the file explorer.
 				isModifier:
 					(next: IsModifier): IsModifier =>
-					function (this: unknown, evt: Parameters<IsModifier>[0], modifier) {
+					(evt: Parameters<IsModifier>[0], modifier) => {
 						if (
 							modifier === "Mod" &&
 							evt instanceof MouseEvent &&
 							inEditor(evt) &&
-							matchesTrigger(evt, plugin.settings.trigger)
+							matches(evt)
 						) {
 							return true;
 						}
@@ -90,6 +90,8 @@ export default class OpenToSidePlugin extends Plugin {
 					},
 			})
 		);
+
+		const redirect = (paneType: unknown) => this.redirect(paneType);
 
 		// Every split-open funnels through getLeaf("split"), which makes this the one place worth
 		// patching to choose *where* the note lands.
@@ -99,18 +101,18 @@ export default class OpenToSidePlugin extends Plugin {
 				// drop the `direction` argument when passing through to Obsidian.
 				getLeaf: (next: GetLeaf): GetLeaf =>
 					function (this: Workspace, ...args: unknown[]): WorkspaceLeaf {
-						const redirected = plugin.redirect(
-							args[0] as PaneType | boolean | undefined
+						return (
+							redirect(args[0]) ??
+							(next as (...a: unknown[]) => WorkspaceLeaf).apply(this, args)
 						);
-						if (redirected) return redirected;
-						return (next as (...a: unknown[]) => WorkspaceLeaf).apply(this, args);
-					} as GetLeaf,
+					},
 			})
 		);
 	}
 
 	async loadSettings(): Promise<void> {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		const stored = (await this.loadData()) as Partial<OpenToSideSettings> | null;
+		this.settings = { ...DEFAULT_SETTINGS, ...stored };
 	}
 
 	async saveSettings(): Promise<void> {
@@ -122,7 +124,7 @@ export default class OpenToSidePlugin extends Plugin {
 	 * it natively. Null is the safe answer for anything unexpected — this runs inside a patched
 	 * core method, so throwing here would break link opening across the whole vault.
 	 */
-	private redirect(paneType: PaneType | boolean | undefined): WorkspaceLeaf | null {
+	private redirect(paneType: unknown): WorkspaceLeaf | null {
 		if (paneType !== "split") return null;
 		if (!this.consumeSplitClick()) return null;
 
@@ -132,11 +134,15 @@ export default class OpenToSidePlugin extends Plugin {
 				resolveSideLeaf(this.app, this.settings) ?? this.createSideColumn();
 			if (!target) return null;
 
-			this.app.workspace.revealLeaf(target);
+			// Nothing to wait for: the caller opens the file into the leaf we return, and the
+			// reveal only has to bring its tab to the front of the group.
+			void this.app.workspace.revealLeaf(target);
 
 			if (this.settings.keepFocus && source) {
 				// The caller focuses the leaf we return, so hand focus back afterwards.
-				setTimeout(() => this.app.workspace.setActiveLeaf(source, { focus: true }));
+				window.setTimeout(() => {
+					this.app.workspace.setActiveLeaf(source, { focus: true });
+				});
 			}
 
 			return target;

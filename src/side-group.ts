@@ -22,7 +22,7 @@ export function getActiveLeaf(app: App): WorkspaceLeaf | null {
  * The main area's root split lays its children out as columns when its direction is "vertical"
  * (a vertical divider between them). Anything else is a stack, which has no "group to the right".
  */
-const COLUMNS: string = "vertical";
+const COLUMNS = "vertical";
 
 /**
  * Find a leaf in the tab group to the right of the active one.
@@ -35,7 +35,7 @@ export function resolveSideLeaf(
 	settings: OpenToSideSettings
 ): WorkspaceLeaf | null {
 	const root = app.workspace.rootSplit as WorkspaceSplit;
-	const columns = root?.children;
+	const columns = root.children;
 	if (!columns || columns.length <= 1) return null;
 	if (root.direction !== COLUMNS) return null;
 
@@ -87,18 +87,17 @@ function columnOf(leaf: WorkspaceLeaf, root: WorkspaceSplit): WorkspaceItem | nu
  * itself be a split holding several stacked groups, so prefer the most recently used one.
  */
 function findTabsContainer(app: App, column: WorkspaceItem): WorkspaceParent | null {
-	const recent = app.workspace.getMostRecentLeaf(column as WorkspaceParent);
+	const recent = app.workspace.getMostRecentLeaf(column);
 	if (recent?.parent) return recent.parent;
 
 	// getMostRecentLeaf returns null for a column whose leaves have never been focused.
-	let node: WorkspaceItem | undefined = column;
-	while (node) {
-		const children: WorkspaceItem[] | undefined = (node as WorkspaceParent).children;
-		if (!children?.length) return null;
-		if (children[0] instanceof WorkspaceLeaf) return node as WorkspaceParent;
-		node = children[0];
+	let node: WorkspaceParent = column;
+	for (;;) {
+		const first: WorkspaceItem | undefined = node.children?.[0];
+		if (!first) return null;
+		if (first instanceof WorkspaceLeaf) return node;
+		node = first;
 	}
-	return null;
 }
 
 /** Reuse the group's current tab, or append a new one. */

@@ -12,6 +12,9 @@
 		"isolatedModules": true,
 		"strictNullChecks": true,
 		"strict": true,
+		// The workspace tree is walked by index, and a missing child is a real possibility rather
+		// than a type error — this keeps the guards around those lookups honest.
+		"noUncheckedIndexedAccess": true,
 		"lib": ["DOM", "ES5", "ES6", "ES7"]
 	},
 	"include": ["src/**/*.ts"]
