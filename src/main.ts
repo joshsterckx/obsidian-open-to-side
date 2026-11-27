@@ -1,4 +1,4 @@
-import { Keymap, Plugin, Workspace, WorkspaceLeaf } from "obsidian";
+import { Command, Keymap, Plugin, Workspace, WorkspaceLeaf } from "obsidian";
 import { around } from "monkey-around";
 import { getActiveLeaf, resolveSideLeaf } from "./side-group";
 import {
@@ -14,6 +14,12 @@ import { matchesTrigger } from "./trigger";
  * never redirect an unrelated split later on.
  */
 const CLICK_WINDOW_MS = 500;
+
+/** How long after a redirect the side leaf grabbing focus is undone (when keeping focus). */
+const FOCUS_WINDOW_MS = 1000;
+
+/** Obsidian's built-in "Open link under cursor to the right" command. */
+const SPLIT_COMMAND_ID = "editor:open-link-in-new-split";
 
 type GetLeaf = Workspace["getLeaf"];
 type IsModEvent = typeof Keymap.isModEvent;
@@ -91,6 +97,12 @@ export default class OpenToSidePlugin extends Plugin {
 			})
 		);
 
+		// The keyboard command ends in the same getLeaf("split") as the click, so arming the
+		// flag while the command runs is all it takes to route it to the side group too.
+		this.app.workspace.onLayoutReady(() => {
+			this.patchSplitCommand();
+		});
+
 		const redirect = (paneType: unknown) => this.redirect(paneType);
 
 		// Every split-open funnels through getLeaf("split"), which makes this the one place worth
@@ -138,18 +150,65 @@ export default class OpenToSidePlugin extends Plugin {
 			// reveal only has to bring its tab to the front of the group.
 			void this.app.workspace.revealLeaf(target);
 
-			if (this.settings.keepFocus && source) {
-				// The caller focuses the leaf we return, so hand focus back afterwards.
-				window.setTimeout(() => {
-					this.app.workspace.setActiveLeaf(source, { focus: true });
-				});
-			}
+			if (this.settings.keepFocus && source) this.keepFocusOn(source, target);
 
 			return target;
 		} catch (error) {
 			console.error("[open-to-side] falling back to a native split:", error);
 			return null;
 		}
+	}
+
+	/**
+	 * Wrap the built-in split command so running it counts as a trigger. Only the executing call
+	 * arms the flag, never the availability check (`checking === true`), so the command palette
+	 * merely listing it cannot redirect an unrelated split. If the command is missing (desktop
+	 * only, or renamed in a future version), it is left alone.
+	 */
+	private patchSplitCommand(): void {
+		const command = this.app.commands?.commands?.[SPLIT_COMMAND_ID];
+		if (!command) return;
+		const arm = () => {
+			if (this.settings.keyboardCommand) this.splitClickAt = Date.now();
+		};
+		type CheckCallback = NonNullable<Command["checkCallback"]>;
+		type Callback = NonNullable<Command["callback"]>;
+		const patches: Partial<Record<"checkCallback" | "callback", unknown>> = {};
+		if (command.checkCallback) {
+			patches.checkCallback = (next: CheckCallback): CheckCallback =>
+				function (this: unknown, checking: boolean) {
+					if (!checking) arm();
+					return next.call(this, checking);
+				};
+		}
+		if (command.callback) {
+			patches.callback = (next: Callback): Callback =>
+				function (this: unknown) {
+					arm();
+					return next.call(this) as unknown;
+				};
+		}
+		this.register(around(command, patches as Parameters<typeof around<Command>>[1]));
+	}
+
+	/**
+	 * The caller focuses the leaf we return, so hand focus back afterwards. A reused leaf is
+	 * focused right away, but a newly created one only once its file has finished opening, which
+	 * is after a plain timeout would fire. So also watch for the target becoming active for a
+	 * short while and undo that.
+	 */
+	private keepFocusOn(source: WorkspaceLeaf, target: WorkspaceLeaf): void {
+		const workspace = this.app.workspace;
+		const restore = () => {
+			workspace.setActiveLeaf(source, { focus: true });
+		};
+		const ref = workspace.on("active-leaf-change", (leaf) => {
+			if (leaf === target) window.setTimeout(restore);
+		});
+		window.setTimeout(restore);
+		window.setTimeout(() => {
+			workspace.offref(ref);
+		}, FOCUS_WINDOW_MS);
 	}
 
 	/** True if a trigger click just happened. One-shot: the flag is cleared on read. */

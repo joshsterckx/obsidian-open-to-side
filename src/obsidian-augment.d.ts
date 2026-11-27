@@ -25,6 +25,10 @@ declare module "obsidian" {
 		pinned?: boolean;
 	}
 
+	interface App {
+		commands?: { commands?: Record<string, Command> };
+	}
+
 	interface Workspace {
 		createLeafInParent(parent: WorkspaceParent, index: number): WorkspaceLeaf;
 		getMostRecentLeaf(root?: WorkspaceParent): WorkspaceLeaf | null;

@@ -21,8 +21,10 @@ Not yet in the community plugin directory. Until then:
 
 ## Behaviour
 
-- **Only the trigger click is overridden.** The "Split right" command and other plugins' split-opens
-  keep Obsidian's native behaviour.
+- **Only the trigger click and the "Open link under cursor to the right" command are overridden.**
+  The command (`Cmd+Option+Enter` by default) opens the link under the cursor in the side group, like
+  the trigger click. The "Split right" command and other plugins' split-opens keep Obsidian's
+  native behaviour.
 - Works for links in Live Preview and Reading mode, and for the file explorer, search results and
   backlinks.
 - Clicking from inside the side column opens there rather than chaining a third column.
@@ -33,6 +35,7 @@ Not yet in the community plugin directory. Until then:
 | Setting | Default | Effect |
 | --- | --- | --- |
 | Trigger | `Cmd+Alt+click` | Which click opens a note in the side group. Also available: `Cmd+click`, `Cmd+Shift+click`, `Alt+click`, `Alt+Shift+click`, `Shift+click`. |
+| Use for the keyboard command | On | Also sends Obsidian's "Open link under cursor to the right" command to the side group. Turn off to let it always create a new split. |
 | Keep focus in the current note | On | Leaves the cursor where it was, so you can keep reading and previewing. Turn off to jump into the side pane. |
 | Reuse the side tab | On | Replaces the side group's current tab, keeping it to a single preview. Turn off to open a new tab each time. |
 
@@ -59,7 +62,9 @@ method rather than trying to intercept link clicks in the DOM — which would ne
 for Live Preview, Reading mode, the file explorer, search and backlinks.
 
 To keep the override narrow, a capture-phase listener records whether a trigger click just happened
-(it does not intercept), and the patch only redirects when that flag is fresh.
+(it does not intercept), and the patch only redirects when that flag is fresh. The "Open link under
+cursor to the right" command ends in the same `getLeaf("split")`, so the plugin wraps that command's
+callback to set the same flag while it runs (not while Obsidian only checks whether it is available).
 
 A custom trigger needs one more piece. Obsidian only produces `getLeaf("split")` for its own
 `Cmd+Alt+click`, so a combo like plain `Alt+click` would never reach that patch. Obsidian asks the
