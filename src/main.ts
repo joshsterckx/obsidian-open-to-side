@@ -1,4 +1,4 @@
-import { Keymap, Plugin, Workspace, WorkspaceLeaf } from "obsidian";
+import { Command, Keymap, Plugin, Workspace, WorkspaceLeaf } from "obsidian";
 import { around } from "monkey-around";
 import { getActiveLeaf, resolveSideLeaf } from "./side-group";
 import {
@@ -14,6 +14,9 @@ import { matchesTrigger } from "./trigger";
  * never redirect an unrelated split later on.
  */
 const CLICK_WINDOW_MS = 500;
+
+/** Obsidian's built-in "Open link under cursor to the right" command. */
+const SPLIT_COMMAND_ID = "editor:open-link-in-new-split";
 
 type GetLeaf = Workspace["getLeaf"];
 type IsModEvent = typeof Keymap.isModEvent;
@@ -91,6 +94,12 @@ export default class OpenToSidePlugin extends Plugin {
 			})
 		);
 
+		// The keyboard command ends in the same getLeaf("split") as the click, so arming the
+		// flag while the command runs is all it takes to route it to the side group too.
+		this.app.workspace.onLayoutReady(() => {
+			this.patchSplitCommand();
+		});
+
 		const redirect = (paneType: unknown) => this.redirect(paneType);
 
 		// Every split-open funnels through getLeaf("split"), which makes this the one place worth
@@ -150,6 +159,38 @@ export default class OpenToSidePlugin extends Plugin {
 			console.error("[open-to-side] falling back to a native split:", error);
 			return null;
 		}
+	}
+
+	/**
+	 * Wrap the built-in split command so running it counts as a trigger. Only the executing call
+	 * arms the flag, never the availability check (`checking === true`), so the command palette
+	 * merely listing it cannot redirect an unrelated split. If the command is missing (desktop
+	 * only, or renamed in a future version), it is left alone.
+	 */
+	private patchSplitCommand(): void {
+		const command = this.app.commands?.commands?.[SPLIT_COMMAND_ID];
+		if (!command) return;
+		const arm = () => {
+			if (this.settings.keyboardCommand) this.splitClickAt = Date.now();
+		};
+		type CheckCallback = NonNullable<Command["checkCallback"]>;
+		type Callback = NonNullable<Command["callback"]>;
+		const patches: Partial<Record<"checkCallback" | "callback", unknown>> = {};
+		if (command.checkCallback) {
+			patches.checkCallback = (next: CheckCallback): CheckCallback =>
+				function (this: unknown, checking: boolean) {
+					if (!checking) arm();
+					return next.call(this, checking);
+				};
+		}
+		if (command.callback) {
+			patches.callback = (next: Callback): Callback =>
+				function (this: unknown) {
+					arm();
+					return next.call(this) as unknown;
+				};
+		}
+		this.register(around(command, patches as Parameters<typeof around<Command>>[1]));
 	}
 
 	/** True if a trigger click just happened. One-shot: the flag is cleared on read. */

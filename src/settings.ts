@@ -15,12 +15,15 @@ export interface OpenToSideSettings {
 	keepFocus: boolean;
 	/** Replace the side group's current tab instead of stacking up a new one each click. */
 	reuseTab: boolean;
+	/** Also send Obsidian's "Open link under cursor to the right" command to the side group. */
+	keyboardCommand: boolean;
 }
 
 export const DEFAULT_SETTINGS: OpenToSideSettings = {
 	trigger: DEFAULT_TRIGGER,
 	keepFocus: true,
 	reuseTab: true,
+	keyboardCommand: true,
 };
 
 export class OpenToSideSettingTab extends PluginSettingTab {
@@ -57,6 +60,18 @@ export class OpenToSideSettingTab extends PluginSettingTab {
 					this.display();
 				});
 			});
+
+		new Setting(containerEl)
+			.setName("Use for the keyboard command")
+			.setDesc(
+				"Also open the side group from Obsidian's \"Open link under cursor to the right\" command (Cmd+Option+Enter by default). Turn this off to let that command always create a new split."
+			)
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.settings.keyboardCommand).onChange(async (value) => {
+					this.plugin.settings.keyboardCommand = value;
+					await this.plugin.saveSettings();
+				})
+			);
 
 		new Setting(containerEl)
 			.setName("Keep focus in the current note")
