@@ -15,6 +15,9 @@ import { matchesTrigger } from "./trigger";
  */
 const CLICK_WINDOW_MS = 500;
 
+/** How long after a redirect the side leaf grabbing focus is undone (when keeping focus). */
+const FOCUS_WINDOW_MS = 1000;
+
 /** Obsidian's built-in "Open link under cursor to the right" command. */
 const SPLIT_COMMAND_ID = "editor:open-link-in-new-split";
 
@@ -147,12 +150,7 @@ export default class OpenToSidePlugin extends Plugin {
 			// reveal only has to bring its tab to the front of the group.
 			void this.app.workspace.revealLeaf(target);
 
-			if (this.settings.keepFocus && source) {
-				// The caller focuses the leaf we return, so hand focus back afterwards.
-				window.setTimeout(() => {
-					this.app.workspace.setActiveLeaf(source, { focus: true });
-				});
-			}
+			if (this.settings.keepFocus && source) this.keepFocusOn(source, target);
 
 			return target;
 		} catch (error) {
@@ -191,6 +189,26 @@ export default class OpenToSidePlugin extends Plugin {
 				};
 		}
 		this.register(around(command, patches as Parameters<typeof around<Command>>[1]));
+	}
+
+	/**
+	 * The caller focuses the leaf we return, so hand focus back afterwards. A reused leaf is
+	 * focused right away, but a newly created one only once its file has finished opening, which
+	 * is after a plain timeout would fire. So also watch for the target becoming active for a
+	 * short while and undo that.
+	 */
+	private keepFocusOn(source: WorkspaceLeaf, target: WorkspaceLeaf): void {
+		const workspace = this.app.workspace;
+		const restore = () => {
+			workspace.setActiveLeaf(source, { focus: true });
+		};
+		const ref = workspace.on("active-leaf-change", (leaf) => {
+			if (leaf === target) window.setTimeout(restore);
+		});
+		window.setTimeout(restore);
+		window.setTimeout(() => {
+			workspace.offref(ref);
+		}, FOCUS_WINDOW_MS);
 	}
 
 	/** True if a trigger click just happened. One-shot: the flag is cleared on read. */
